@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Monitor de Voos BSB ↔ BH</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Epilogue:wght@300;400;500;600;700&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f5f2ec;
+    --surface: #ffffff;
+    --surface2: #ede9e1;
+    --border: #d8d2c6;
+    --ink: #1a1814;
+    --ink2: #5a5650;
+    --ink3: #9a948e;
+    --accent: #c8390a;
+    --best: #1a6b3c;
+    --mid: #8a6a00;
+    --high: #9a2a0a;
+    --best-bg: #e8f5ee;
+    --mid-bg: #fdf6e0;
+    --high-bg: #fdecea;
+    --esc-bg: #f0eaf8;
+    --esc-border: #7c5cbf;
+    --esc-text: #4a2d8a;
+    --font-d: 'Bebas Neue', sans-serif;
+    --font-b: 'Epilogue', sans-serif;
+    --font-m: 'DM Mono', monospace;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--ink); font-family:var(--font-b); min-height:100vh; }
+  body::after {
+    content:''; position:fixed; inset:0; pointer-events:none; opacity:0.5; z-index:999;
+    background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  }
+  .wrap { max-width:1040px; margin:0 auto; padding:0 24px 80px; }
+
+  header {
+    padding:44px 0 32px; border-bottom:2px solid var(--ink); margin-bottom:28px;
+    display:flex; justify-content:space-between; align-items:flex-end; gap:24px; flex-wrap:wrap;
+  }
+  .eyebrow { font-family:var(--font-m); font-size:11px; letter-spacing:3px; text-transform:uppercase; color:var(--ink3); margin-bottom:6px; }
+  h1 { font-family:var(--font-d); font-size:clamp(44px,8vw,76px); letter-spacing:2px; line-height:.9; }
+  h1 .sep { color:var(--accent); margin:0 6px; }
+  .tagline { margin-top:10px; font-size:13px; color:var(--ink3); font-weight:300; }
+
+  .dir-wrap { display:flex; flex-direction:column; gap:8px; }
+  .dir-lbl { font-family:var(--font-m); font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--ink3); }
+  .pills { display:flex; background:var(--surface2); border:1.5px solid var(--border); border-radius:6px; padding:3px; gap:3px; }
+  .pill { padding:8px 16px; border-radius:4px; font-family:var(--font-m); font-size:12px; cursor:pointer; border:none; background:transparent; color:var(--ink2); transition:all .15s; white-space:nowrap; }
+  .pill.on { background:var(--ink); color:var(--bg); }
+
+  .bar { display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
+  .lbl { font-family:var(--font-m); font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:var(--ink3); white-space:nowrap; }
+  .sel, .api-inp {
+    background:var(--surface); border:1.5px solid var(--border); border-radius:5px;
+    padding:9px 14px; font-family:var(--font-m); font-size:12px; color:var(--ink); outline:none;
+  }
+  .sel { cursor:pointer; appearance:none; }
+  .api-inp { flex:1; min-width:180px; transition:border-color .2s; }
+  .api-inp:focus { border-color:var(--ink); }
+  .api-inp::placeholder { color:var(--ink3); }
+  .api-a { font-size:11px; color:#1a4a8a; text-decoration:none; font-family:var(--font-m); white-space:nowrap; }
+  .api-a:hover { text-decoration:underline; }
+
+  .btn {
+    background:var(--accent); color:#fff; border:none; border-radius:5px;
+    padding:10px 28px; font-family:var(--font-d); font-size:18px; letter-spacing:1.5px;
+    cursor:pointer; transition:all .15s; white-space:nowrap;
+  }
+  .btn:hover { background:var(--ink); transform:translateY(-1px); }
+  .btn:active { transform:translateY(0); }
+  .btn:disabled { opacity:.4; cursor:not-allowed; transform:none; }
+  .demo-chip { font-family:var(--font-m); font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:var(--ink3); border:1px dashed var(--border); border-radius:4px; padding:5px 10px; }
+  .req-chip { font-family:var(--font-m); font-size:10px; letter-spacing:1px; color:var(--ink3); border:1px solid var(--border); border-radius:4px; padding:5px 10px; }
+
+  .legend {
+    display:flex; align-items:center; gap:16px; margin-bottom:22px;
+    padding:12px 18px; background:var(--surface); border:1.5px solid var(--border); border-radius:6px; flex-wrap:wrap;
+  }
+  .ll { font-family:var(--font-m); font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:var(--ink3); }
+  .li { display:flex; align-items:center; gap:6px; font-size:12px; font-weight:500; }
+  .ld { width:10px; height:10px; border-radius:2px; flex-shrink:0; }
+  .ld-best { background:var(--best-bg); border:1.5px solid var(--best); }
+  .ld-mid  { background:var(--mid-bg);  border:1.5px solid var(--mid); }
+  .ld-high { background:var(--high-bg); border:1.5px solid var(--high); }
+  .ld-esc  { background:var(--esc-bg);  border:1.5px dashed var(--esc-border); }
+
+  .summary { display:none; padding:16px 20px; background:var(--surface); border:1.5px solid var(--border); border-radius:6px; margin-bottom:26px; align-items:center; gap:28px; flex-wrap:wrap; }
+  .summary.on { display:flex; }
+  .sv-lbl { font-family:var(--font-m); font-size:9px; letter-spacing:2px; text-transform:uppercase; color:var(--ink3); margin-bottom:3px; }
+  .sv-val { font-family:var(--font-d); font-size:22px; letter-spacing:1px; }
+  .sv-val.best { color:var(--best); }
+
+  .loading { display:none; text-align:center; padding:60px 0; }
+  .loading.on { display:block; }
+  .prog-bar { width:240px; height:2px; background:var(--border); margin:16px auto 0; border-radius:2px; overflow:hidden; }
+  .prog-fill { height:100%; background:var(--accent); width:0%; transition:width .2s; border-radius:2px; }
+  .load-txt { font-family:var(--font-m); font-size:12px; color:var(--ink3); letter-spacing:1px; }
+
+  .cal-sec { margin-bottom:48px; }
+  .cal-title { font-family:var(--font-d); font-size:26px; letter-spacing:2px; border-bottom:1.5px solid var(--border); padding-bottom:10px; margin-bottom:14px; display:flex; align-items:center; gap:12px; }
+  .r-chip { font-family:var(--font-m); font-size:11px; background:var(--ink); color:var(--bg); padding:4px 12px; border-radius:4px; letter-spacing:1px; }
+  .hdr-row { display:grid; grid-template-columns:72px repeat(3,1fr); gap:6px; margin-bottom:4px; }
+  .hdr-col { font-family:var(--font-m); font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--ink3); text-align:center; }
+  .wk-row { display:grid; grid-template-columns:72px repeat(3,1fr); gap:6px; margin-bottom:6px; align-items:start; }
+  .wk-lbl { font-family:var(--font-m); font-size:9px; letter-spacing:1px; color:var(--ink3); text-transform:uppercase; text-align:right; padding-right:8px; padding-top:13px; }
+
+  .dc {
+    background:var(--surface); border:1.5px solid var(--border); border-radius:8px;
+    padding:10px 10px 10px 12px; cursor:pointer; transition:all .15s; position:relative; min-height:96px;
+  }
+  .dc:hover { border-color:var(--ink); transform:translateY(-2px); box-shadow:0 4px 14px rgba(0,0,0,.09); }
+  .dc.past { opacity:.28; cursor:default; min-height:0; padding:8px 10px; }
+  .dc.past:hover { transform:none; box-shadow:none; border-color:var(--border); }
+  .dc.t-best { background:var(--best-bg); border-color:#5db87a; }
+  .dc.t-mid  { background:var(--mid-bg);  border-color:#c8a800; }
+  .dc.t-high { background:var(--high-bg); border-color:#d46060; }
+  .dc.t-esc  { background:var(--esc-bg);  border-color:var(--esc-border); border-style:dashed; }
+
+  .dn { font-family:var(--font-d); font-size:26px; letter-spacing:1px; line-height:1; }
+  .dm { font-family:var(--font-m); font-size:9px; letter-spacing:2px; text-transform:uppercase; color:var(--ink3); margin-bottom:5px; }
+  .dp { font-family:var(--font-m); font-size:14px; font-weight:500; margin-top:4px; }
+  .dp.t-best { color:var(--best); }
+  .dp.t-mid  { color:var(--mid); }
+  .dp.t-high { color:var(--high); }
+  .dp.t-esc  { color:var(--esc-text); }
+  .ds { font-size:10px; color:var(--ink3); margin-top:2px; line-height:1.3; }
+  .ds.t-esc { color:var(--esc-text); opacity:.85; }
+  .no-d { font-family:var(--font-m); font-size:10px; color:var(--ink3); margin-top:6px; }
+
+  .badge-top { position:absolute; top:6px; right:6px; background:var(--best); color:#fff; font-family:var(--font-m); font-size:8px; letter-spacing:1px; text-transform:uppercase; padding:2px 5px; border-radius:3px; }
+  .badge-esc { position:absolute; top:6px; right:6px; background:var(--esc-border); color:#fff; font-family:var(--font-m); font-size:8px; letter-spacing:1px; padding:2px 5px; border-radius:3px; }
+  .esc-line { display:inline-block; margin-top:4px; background:var(--esc-border); color:#fff; font-family:var(--font-m); font-size:9px; padding:1px 5px; border-radius:3px; letter-spacing:.5px; }
+
+  .m-ov { display:none; position:fixed; inset:0; background:rgba(26,24,20,.55); z-index:100; align-items:center; justify-content:center; backdrop-filter:blur(4px); }
+  .m-ov.on { display:flex; }
+  .modal { background:var(--bg); border:2px solid var(--ink); border-radius:10px; width:90%; max-width:500px; max-height:82vh; overflow-y:auto; animation:up .18s ease; }
+  @keyframes up { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:none} }
+  .m-hdr { padding:22px 24px 14px; border-bottom:1.5px solid var(--border); display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+  .m-route { font-family:var(--font-d); font-size:30px; letter-spacing:2px; line-height:1; }
+  .m-date { font-family:var(--font-m); font-size:12px; color:var(--ink3); margin-top:4px; letter-spacing:1px; }
+  .m-close { background:none; border:1.5px solid var(--border); border-radius:4px; width:30px; height:30px; cursor:pointer; font-size:14px; color:var(--ink2); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .m-close:hover { background:var(--surface2); }
+  .m-body { padding:8px 24px 24px; }
+  .m-sec { font-family:var(--font-m); font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--ink3); padding:14px 0 8px; border-bottom:1px solid var(--border); margin-bottom:4px; }
+  .fr { display:grid; grid-template-columns:60px 1fr 70px 72px; align-items:center; gap:8px; padding:11px 0; border-bottom:1px solid var(--border); }
+  .fr:last-child { border-bottom:none; }
+  .fr-a { font-weight:600; font-size:13px; }
+  .fr-t { font-family:var(--font-m); font-size:12px; color:var(--ink2); text-align:center; }
+  .fr-s { font-size:11px; color:var(--ink3); text-align:center; }
+  .fr-s.dir { color:var(--best); font-weight:700; }
+  .fr-s.esc { color:var(--esc-text); }
+  .fr-p { font-family:var(--font-m); font-size:15px; font-weight:500; text-align:right; }
+  .fr-p.t-best{color:var(--best)} .fr-p.t-mid{color:var(--mid)} .fr-p.t-high{color:var(--high)} .fr-p.esc{color:var(--esc-text)}
+  .m-note { font-family:var(--font-m); font-size:11px; color:var(--ink3); padding:10px 0 4px; font-style:italic; }
+  .fr.dim { opacity:.45; }
+
+  @media(max-width:600px){
+    .hdr-row,.wk-row{grid-template-columns:48px repeat(3,1fr)}
+    .dc{padding:8px;min-height:82px} .dn{font-size:22px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div>
+    <div class="eyebrow">Monitor de Passagens Aéreas</div>
+    <h1>BSB <span class="sep">↔</span> BH</h1>
+    <p class="tagline">Qui · Sex · Dom — prioridade voos diretos</p>
+  </div>
+  <div class="dir-wrap">
+    <div class="dir-lbl">Direção</div>
+    <div class="pills">
+      <button class="pill on" onclick="setDir(this,'both')">Ambas</button>
+      <button class="pill"   onclick="setDir(this,'bsb-bh')">BSB → BH</button>
+      <button class="pill"   onclick="setDir(this,'bh-bsb')">BH → BSB</button>
+    </div>
+  </div>
+</header>
+
+<div class="bar">
+  <span class="lbl">SerpAPI Key</span>
+  <input class="api-inp" type="password" id="apiKey" value="54d3a3750ed3bead3ccfe62b073177c535b30c4c1b7afbee26b280dfdf7ecde3" placeholder="Chave para dados reais (opcional)...">
+  <a class="api-a" href="https://serpapi.com" target="_blank">→ grátis</a>
+</div>
+
+<div class="bar">
+  <span class="lbl">Semanas</span>
+  <select class="sel" id="wks" onchange="updateReqCount()">
+    <option value="8">8 semanas</option>
+    <option value="12" selected>12 semanas</option>
+    <option value="16">16 semanas</option>
+  </select>
+  <button class="btn" id="btnScan" onclick="runScan()">ESCANEAR DATAS</button>
+  <span class="demo-chip" id="modeChip">● AGUARDANDO SCAN</span>
+  <span class="req-chip" id="reqChip"></span>
+</div>
+
+<div class="legend">
+  <span class="ll">Legenda</span>
+  <div class="li"><div class="ld ld-best"></div>Direto · barato</div>
+  <div class="li"><div class="ld ld-mid"></div>Direto · médio</div>
+  <div class="li"><div class="ld ld-high"></div>Direto · caro</div>
+  <div class="li"><div class="ld ld-esc"></div>Com escala (≥30% off direto)</div>
+</div>
+
+<div class="summary" id="sum">
+  <div><div class="sv-lbl">Menor tarifa (direto)</div><div class="sv-val best" id="sMin">—</div></div>
+  <div><div class="sv-lbl">Melhor data</div><div class="sv-val" id="sDate">—</div></div>
+  <div><div class="sv-lbl">Companhia</div><div class="sv-val" id="sAirline">—</div></div>
+  <div><div class="sv-lbl">Datas analisadas</div><div class="sv-val" id="sDates">—</div></div>
+</div>
+
+<div class="loading" id="loading">
+  <div class="load-txt" id="loadTxt">Consultando tarifas...</div>
+  <div class="prog-bar"><div class="prog-fill" id="progFill"></div></div>
+</div>
+
+<div id="cal"></div>
+</div>
+
+<div class="m-ov" id="mOv" onclick="closeMBg(event)">
+  <div class="modal">
+    <div class="m-hdr">
+      <div><div class="m-route" id="mRoute"></div><div class="m-date" id="mDate"></div></div>
+      <button class="m-close" onclick="closeM()">✕</button>
+    </div>
+    <div class="m-body" id="mBody"></div>
+  </div>
+</div>
+
+<script>
+const MO = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+const DL = ['QUI','SEX','DOM'];
+let dir = 'both';
+const STORE = {};
+
+function setDir(btn, d) {
+  dir = d;
+  document.querySelectorAll('.pill').forEach(p => p.classList.remove('on'));
+  btn.classList.add('on');
+}
+
+function updateReqCount() {
+  const n = parseInt(document.getElementById('wks').value);
+  const nRoutes = dir === 'both' ? 2 : 1;
+  const reqs = 3 * n * nRoutes;
+  const chip = document.getElementById('reqChip');
+  const color = reqs > 90 ? '#9a2a0a' : reqs > 60 ? '#8a6a00' : '#1a6b3c';
+  chip.style.color = color;
+  chip.style.borderColor = color;
+  chip.textContent = `~${reqs} requisições/mês`;
+}
+
+function getWeeks(n) {
+  const weeks = [], cur = new Date();
+  cur.setHours(0,0,0,0);
+  while (cur.getDay() !== 4) cur.setDate(cur.getDate()+1);
+  for (let w=0; w<n; w++) {
+    const thu = new Date(cur);
+    const fri = new Date(cur); fri.setDate(fri.getDate()+1);
+    const sun = new Date(cur); sun.setDate(sun.getDate()+3);
+    weeks.push([thu, fri, sun]);
+    cur.setDate(cur.getDate()+7);
+  }
+  return weeks;
+}
+
+function iso(d) {
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function fmtS(d) { return d.getDate()+' '+MO[d.getMonth()]; }
+function fmt(p) { return 'R$\u00a0'+p.toLocaleString('pt-BR'); }
+
+function simFlights(ds, from) {
+  const seed = new Date(ds).getTime()/86400000 + from.charCodeAt(0)*7;
+  const r = n => Math.abs(Math.sin(seed*n+n)*9999)%1;
+  const base = from==='BSB' ? 290 : 275;
+  return [
+    {airline:'LATAM',dep:'06:05',arr:'07:20',stops:0,mult:.95+r(1)*.45},
+    {airline:'GOL',  dep:'08:30',arr:'09:45',stops:0,mult:.88+r(2)*.38},
+    {airline:'Azul', dep:'10:00',arr:'11:15',stops:0,mult:.92+r(3)*.40},
+    {airline:'LATAM',dep:'14:15',arr:'15:30',stops:0,mult:1.0 +r(4)*.35},
+    {airline:'GOL',  dep:'18:00',arr:'19:15',stops:0,mult:.94+r(5)*.42},
+    {airline:'Azul', dep:'20:30',arr:'21:45',stops:0,mult:.96+r(6)*.30},
+    {airline:'Azul', dep:'07:10',arr:'10:40',stops:1,mult:.55+r(7)*.25},
+    {airline:'GOL',  dep:'12:00',arr:'16:00',stops:1,mult:.60+r(8)*.20},
+    {airline:'LATAM',dep:'16:30',arr:'20:00',stops:1,mult:.63+r(9)*.22},
+  ].map(f=>({...f,price:Math.round(base*f.mult/5)*5}))
+   .sort((a,b)=>a.price-b.price);
+}
+
+function selectCard(all) {
+  const directs = all.filter(f=>f.stops===0);
+  const escalas = all.filter(f=>f.stops>0);
+  if (!directs.length && !escalas.length) return null;
+  if (!directs.length) {
+    return { primary: escalas.reduce((a,b)=>a.price<b.price?a:b), escala:null, directPrice:null, noDirect:true };
+  }
+  const best = directs.reduce((a,b)=>a.price<b.price?a:b);
+  const threshold = best.price * 0.70;
+  const elig = escalas.filter(f=>f.price<=threshold).sort((a,b)=>a.price-b.price)[0]||null;
+  return { primary:best, escala:elig, directPrice:best.price };
+}
+
+function tier(price, prices) {
+  const s=[...prices].sort((a,b)=>a-b);
+  const p33=s[Math.floor(s.length*.33)], p66=s[Math.floor(s.length*.66)];
+  return price<=p33?'best':price<=p66?'mid':'high';
+}
+
+function buildCal(weeks, rk, rl, directPrices) {
+  const today=new Date(); today.setHours(0,0,0,0);
+  let h = `<div class="cal-sec">
+    <div class="cal-title">${rl} <span class="r-chip">${rk}</span></div>
+    <div class="hdr-row"><div></div>${DL.map(d=>`<div class="hdr-col">${d}</div>`).join('')}</div>`;
+
+  weeks.forEach((wk,wi)=>{
+    h += `<div class="wk-row"><div class="wk-lbl">Sem&nbsp;${wi+1}</div>`;
+    wk.forEach(date=>{
+      const ds=iso(date), isPast=date<today, card=STORE[`${rk}|${ds}`];
+      if (isPast) {
+        h+=`<div class="dc past"><div class="dn">${date.getDate()}</div><div class="dm">${MO[date.getMonth()]}</div><div class="no-d">passado</div></div>`;
+        return;
+      }
+      if (!card) {
+        h+=`<div class="dc"><div class="dn">${date.getDate()}</div><div class="dm">${MO[date.getMonth()]}</div><div class="no-d">sem dados</div></div>`;
+        return;
+      }
+      const p = card.primary;
+      const isDirect = p.stops===0;
+      const t = isDirect ? tier(p.price, directPrices) : 'esc';
+      const isBestAll = isDirect && directPrices.length && p.price===Math.min(...directPrices);
+      let badges='', escLine='';
+      if (isBestAll) badges+=`<div class="badge-top">✦ TOP</div>`;
+      if (!isDirect) badges+=`<div class="badge-esc">ESCALA</div>`;
+      if (card.escala && isDirect) {
+        const pct=Math.round((1-card.escala.price/p.price)*100);
+        escLine=`<div class="esc-line">+escala ${fmt(card.escala.price)} −${pct}%</div>`;
+      }
+      h+=`<div class="dc t-${t}" onclick="openM('${rk}','${ds}','${rl}')" title="Ver todos os voos">
+        ${badges}
+        <div class="dn">${date.getDate()}</div>
+        <div class="dm">${MO[date.getMonth()]}</div>
+        <div class="dp t-${t}">${fmt(p.price)}</div>
+        <div class="ds ${t==='esc'?'t-esc':''}">${p.airline} · ${isDirect?'direto':'escala'}</div>
+        ${escLine}
+      </div>`;
+    });
+    h+=`</div>`;
+  });
+  return h+'</div>';
+}
+
+// Modal — usa dados do STORE se disponível, senão simulação
+function openM(rk, ds, rl) {
+  const stored = STORE[`${rk}|${ds}`];
+  const [from] = rk==='BSB-CNF' ? ['BSB'] : ['CNF'];
+  const all = simFlights(ds, from);
+  const directs = all.filter(f=>f.stops===0).sort((a,b)=>a.price-b.price);
+  const escalas = all.filter(f=>f.stops>0).sort((a,b)=>a.price-b.price);
+  const bestDP = stored?.directPrice || (directs.length ? directs[0].price : null);
+  const allP = all.map(f=>f.price);
+  const mn=Math.min(...allP), mx=Math.max(...allP);
+  const t = p => p<=mn+(mx-mn)*.33?'best':p<=mn+(mx-mn)*.66?'mid':'high';
+  const date=new Date(ds+'T12:00:00');
+  const dayIdx=[4,5,0].indexOf(date.getDay());
+  document.getElementById('mRoute').textContent=rl;
+  document.getElementById('mDate').textContent=(DL[dayIdx]||'')+' · '+fmtS(date)+' '+date.getFullYear();
+  let body='';
+  if (directs.length) {
+    body+=`<div class="m-sec">✈ Voos diretos (${directs.length})</div>`;
+    directs.forEach(f=>{
+      body+=`<div class="fr"><div class="fr-a">${f.airline}</div><div class="fr-t">${f.dep} → ${f.arr}</div><div class="fr-s dir">Direto</div><div class="fr-p t-${t(f.price)}">${fmt(f.price)}</div></div>`;
+    });
+  }
+  if (escalas.length) {
+    body+=`<div class="m-sec">🔁 Com escala — aparece no calendário só se ≥30% mais barato</div>`;
+    escalas.forEach(f=>{
+      const ok = !bestDP || f.price<=bestDP*.70;
+      const pct = bestDP ? Math.round((1-f.price/bestDP)*100) : null;
+      body+=`<div class="fr${ok?'':' dim'}"><div class="fr-a">${f.airline}</div><div class="fr-t">${f.dep} → ${f.arr}</div><div class="fr-s ${ok?'esc':''}">${ok && pct ? `−${pct}% off`:'1 parada'}</div><div class="fr-p ${ok?'esc':'t-'+t(f.price)}">${fmt(f.price)}</div></div>`;
+    });
+    if (bestDP) body+=`<p class="m-note">Voos com menos de 30% de desconto sobre o direto ficam ocultos no calendário.</p>`;
+  }
+  document.getElementById('mBody').innerHTML=body;
+  document.getElementById('mOv').classList.add('on');
+}
+
+function closeMBg(e) { if (e.target.id==='mOv') closeM(); }
+function closeM() { document.getElementById('mOv').classList.remove('on'); }
+
+// ── Real API (CORS-safe) ──
+let corsMode = 'direct';
+const PROXIES = [
+  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  url => `https://proxy.cors.sh/${url}`,
+];
+let proxyIdx = 0;
+
+function parseFlights(data) {
+  if (data.error) throw new Error(data.error);
+  return [...(data.best_flights||[]),(data.other_flights||[])].map(g=>({
+    airline:g.flights?.[0]?.airline||'—',
+    dep:(g.flights?.[0]?.departure_airport?.time||'--:--').slice(0,5),
+    arr:(g.flights?.[g.flights.length-1]?.arrival_airport?.time||'--:--').slice(0,5),
+    stops:g.layovers?.length||0,
+    price:g.price||9999,
+  }));
+}
+
+async function fetchReal(apiKey, from, to, date) {
+  const params = new URLSearchParams({
+    engine:'google_flights', departure_id:from, arrival_id:to,
+    outbound_date:date, currency:'BRL', hl:'pt', api_key:apiKey, type:'2'
+  });
+  const directUrl = `https://serpapi.com/search.json?${params}`;
+
+  try {
+    const res = await fetch(directUrl, { mode:'cors' });
+    if (!res.ok) throw new Error('HTTP '+res.status);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    corsMode = 'direct'; updateModeChip();
+    return parseFlights(data);
+  } catch(e) {
+    console.warn('[direto]', e.message);
+  }
+
+  for (let i = 0; i < PROXIES.length; i++) {
+    const idx = (proxyIdx + i) % PROXIES.length;
+    const proxyUrl = PROXIES[idx](directUrl);
+    try {
+      await new Promise(r => setTimeout(r, 300 + i * 200));
+      const res = await fetch(proxyUrl);
+      if (res.status === 429) { console.warn(`proxy ${idx} 429`); continue; }
+      if (!res.ok) throw new Error('HTTP '+res.status);
+      const data = await res.json();
+      if (data.error) throw new Error('SerpAPI: '+data.error);
+      proxyIdx = idx;
+      corsMode = 'proxy'; updateModeChip();
+      return parseFlights(data);
+    } catch(e) {
+      console.warn(`[proxy ${idx}]`, e.message);
+    }
+  }
+
+  const chip = document.getElementById('modeChip');
+  if (chip) { chip.textContent='● ERRO: todos os proxies falharam'; chip.style.color='#9a2a0a'; chip.style.borderColor='#d46060'; }
+  corsMode = 'failed';
+  throw new Error('proxies esgotados');
+}
+
+function updateModeChip() {
+  const chip = document.getElementById('modeChip');
+  if (!chip) return;
+  if (corsMode==='direct') { chip.textContent='● DADOS REAIS (direto)'; chip.style.color='#1a6b3c'; chip.style.borderColor='#1a6b3c'; }
+  else if (corsMode==='proxy') { chip.textContent='● DADOS REAIS (via proxy)'; chip.style.color='#8a6a00'; chip.style.borderColor='#c8a800'; }
+  else { chip.textContent='● SIMULAÇÃO (API falhou)'; chip.style.color='#9a2a0a'; chip.style.borderColor='#d46060'; }
+}
+
+async function runScan() {
+  const btn=document.getElementById('btnScan');
+  const loading=document.getElementById('loading');
+  const calEl=document.getElementById('cal');
+  const nWks=parseInt(document.getElementById('wks').value);
+  const apiKey=document.getElementById('apiKey').value.trim();
+
+  btn.disabled=true; loading.classList.add('on'); calEl.innerHTML='';
+  document.getElementById('sum').classList.remove('on');
+  corsMode = 'direct';
+  Object.keys(STORE).forEach(k=>delete STORE[k]);
+
+  const weeks=getWeeks(nWks);
+  const allDates=weeks.flat();
+  const today=new Date(); today.setHours(0,0,0,0);
+  const future=allDates.filter(d=>d>=today);
+
+  const routes=[];
+  if (dir!=='bh-bsb') routes.push({key:'BSB-CNF',label:'Brasília → Belo Horizonte',from:'BSB',to:'CNF'});
+  if (dir!=='bsb-bh') routes.push({key:'CNF-BSB',label:'Belo Horizonte → Brasília',from:'CNF',to:'BSB'});
+
+  const total=future.length*routes.length;
+  let done=0;
+  const loadTxt=document.getElementById('loadTxt');
+  const progFill=document.getElementById('progFill');
+
+  for (const route of routes) {
+    for (const date of future) {
+      const ds=iso(date);
+      loadTxt.textContent=`${route.key} · ${fmtS(date)}...`;
+      let flights;
+      if (apiKey) {
+        try { flights=await fetchReal(apiKey,route.from,route.to,ds); }
+        catch(e) { flights=simFlights(ds,route.from); }
+      } else {
+        await new Promise(r=>setTimeout(r,6));
+        flights=simFlights(ds,route.from);
+      }
+      STORE[`${route.key}|${ds}`]=selectCard(flights);
+      progFill.style.width=(++done/total*100)+'%';
+    }
+  }
+
+  loading.classList.remove('on');
+  btn.disabled=false;
+
+  let calHtml='';
+  let gMin=Infinity,gDate='',gAirline='';
+
+  for (const route of routes) {
+    const dps=future
+      .map(d=>STORE[`${route.key}|${iso(d)}`])
+      .filter(c=>c&&c.primary&&c.primary.stops===0)
+      .map(c=>c.primary.price);
+
+    future.forEach(d=>{
+      const c=STORE[`${route.key}|${iso(d)}`];
+      if (c&&c.primary&&c.primary.stops===0&&c.primary.price<gMin) {
+        gMin=c.primary.price; gDate=fmtS(d); gAirline=c.primary.airline;
+      }
+    });
+
+    calHtml+=buildCal(weeks,route.key,route.label,dps);
+  }
+
+  calEl.innerHTML=calHtml;
+  document.getElementById('sMin').textContent=gMin<Infinity?fmt(gMin):'—';
+  document.getElementById('sDate').textContent=gDate||'—';
+  document.getElementById('sAirline').textContent=gAirline||'—';
+  document.getElementById('sDates').textContent=future.length*routes.length;
+  document.getElementById('sum').classList.add('on');
+}
+
+updateReqCount();
+runScan();
+</script>
+</body>
+</html>
