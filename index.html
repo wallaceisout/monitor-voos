@@ -54,16 +54,12 @@
 
   .bar { display:flex; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
   .lbl { font-family:var(--font-m); font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:var(--ink3); white-space:nowrap; }
-  .sel, .api-inp {
+  .sel {
     background:var(--surface); border:1.5px solid var(--border); border-radius:5px;
     padding:9px 14px; font-family:var(--font-m); font-size:12px; color:var(--ink); outline:none;
+    cursor:pointer; appearance:none;
   }
-  .sel { cursor:pointer; appearance:none; }
-  .api-inp { flex:1; min-width:180px; transition:border-color .2s; }
-  .api-inp:focus { border-color:var(--ink); }
-  .api-inp::placeholder { color:var(--ink3); }
-  .api-a { font-size:11px; color:#1a4a8a; text-decoration:none; font-family:var(--font-m); white-space:nowrap; }
-  .api-a:hover { text-decoration:underline; }
+  .req-chip { font-family:var(--font-m); font-size:10px; letter-spacing:1px; color:var(--ink3); border:1px solid var(--border); border-radius:4px; padding:5px 10px; }
 
   .btn {
     background:var(--accent); color:#fff; border:none; border-radius:5px;
@@ -73,8 +69,7 @@
   .btn:hover { background:var(--ink); transform:translateY(-1px); }
   .btn:active { transform:translateY(0); }
   .btn:disabled { opacity:.4; cursor:not-allowed; transform:none; }
-  .demo-chip { font-family:var(--font-m); font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:var(--ink3); border:1px dashed var(--border); border-radius:4px; padding:5px 10px; }
-  .req-chip { font-family:var(--font-m); font-size:10px; letter-spacing:1px; color:var(--ink3); border:1px solid var(--border); border-radius:4px; padding:5px 10px; }
+  .mode-chip { font-family:var(--font-m); font-size:10px; letter-spacing:1.5px; text-transform:uppercase; border:1px solid var(--border); border-radius:4px; padding:5px 10px; color:var(--ink3); }
 
   .legend {
     display:flex; align-items:center; gap:16px; margin-bottom:22px;
@@ -184,12 +179,6 @@
 </header>
 
 <div class="bar">
-  <span class="lbl">SerpAPI Key</span>
-  <input class="api-inp" type="password" id="apiKey" value="54d3a3750ed3bead3ccfe62b073177c535b30c4c1b7afbee26b280dfdf7ecde3" placeholder="Chave para dados reais (opcional)...">
-  <a class="api-a" href="https://serpapi.com" target="_blank">→ grátis</a>
-</div>
-
-<div class="bar">
   <span class="lbl">Semanas</span>
   <select class="sel" id="wks" onchange="updateReqCount()">
     <option value="8">8 semanas</option>
@@ -197,7 +186,7 @@
     <option value="16">16 semanas</option>
   </select>
   <button class="btn" id="btnScan" onclick="runScan()">ESCANEAR DATAS</button>
-  <span class="demo-chip" id="modeChip">● AGUARDANDO SCAN</span>
+  <span class="mode-chip" id="modeChip">● AGUARDANDO SCAN</span>
   <span class="req-chip" id="reqChip"></span>
 </div>
 
@@ -244,6 +233,7 @@ function setDir(btn, d) {
   dir = d;
   document.querySelectorAll('.pill').forEach(p => p.classList.remove('on'));
   btn.classList.add('on');
+  updateReqCount();
 }
 
 function updateReqCount() {
@@ -275,7 +265,7 @@ function iso(d) {
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
 function fmtS(d) { return d.getDate()+' '+MO[d.getMonth()]; }
-function fmt(p) { return 'R$\u00a0'+p.toLocaleString('pt-BR'); }
+function fmt(p) { return 'R$ '+p.toLocaleString('pt-BR'); }
 
 function simFlights(ds, from) {
   const seed = new Date(ds).getTime()/86400000 + from.charCodeAt(0)*7;
@@ -357,11 +347,10 @@ function buildCal(weeks, rk, rl, directPrices) {
   return h+'</div>';
 }
 
-// Modal — usa dados do STORE se disponível, senão simulação
 function openM(rk, ds, rl) {
   const stored = STORE[`${rk}|${ds}`];
-  const [from] = rk==='BSB-CNF' ? ['BSB'] : ['CNF'];
-  const all = simFlights(ds, from);
+  const from = rk==='BSB-CNF' ? 'BSB' : 'CNF';
+  const all = stored?.rawFlights || simFlights(ds, from);
   const directs = all.filter(f=>f.stops===0).sort((a,b)=>a.price-b.price);
   const escalas = all.filter(f=>f.stops>0).sort((a,b)=>a.price-b.price);
   const bestDP = stored?.directPrice || (directs.length ? directs[0].price : null);
@@ -395,74 +384,33 @@ function openM(rk, ds, rl) {
 function closeMBg(e) { if (e.target.id==='mOv') closeM(); }
 function closeM() { document.getElementById('mOv').classList.remove('on'); }
 
-// ── Real API (CORS-safe) ──
-let corsMode = 'direct';
-const PROXIES = [
-  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-  url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-  url => `https://proxy.cors.sh/${url}`,
-];
-let proxyIdx = 0;
+// ── Chama /api/flights (serverless Vercel — sem CORS, sem chave exposta) ──
+function setMode(mode) {
+  const chip = document.getElementById('modeChip');
+  if (!chip) return;
+  if (mode==='real')  { chip.textContent='● DADOS REAIS'; chip.style.color='#1a6b3c'; chip.style.borderColor='#1a6b3c'; }
+  if (mode==='sim')   { chip.textContent='● SIMULAÇÃO (API não disponível)'; chip.style.color='#9a2a0a'; chip.style.borderColor='#d46060'; }
+  if (mode==='wait')  { chip.textContent='● AGUARDANDO SCAN'; chip.style.color='var(--ink3)'; chip.style.borderColor='var(--border)'; }
+}
 
 function parseFlights(data) {
   if (data.error) throw new Error(data.error);
-  return [...(data.best_flights||[]),(data.other_flights||[])].map(g=>({
-    airline:g.flights?.[0]?.airline||'—',
-    dep:(g.flights?.[0]?.departure_airport?.time||'--:--').slice(0,5),
-    arr:(g.flights?.[g.flights.length-1]?.arrival_airport?.time||'--:--').slice(0,5),
-    stops:g.layovers?.length||0,
-    price:g.price||9999,
+  const groups = [...(data.best_flights||[]), ...(data.other_flights||[])];
+  return groups.map(g=>({
+    airline: g.flights?.[0]?.airline || '—',
+    dep: (g.flights?.[0]?.departure_airport?.time || '--:--').slice(0,5),
+    arr: (g.flights?.[g.flights.length-1]?.arrival_airport?.time || '--:--').slice(0,5),
+    stops: g.layovers?.length || 0,
+    price: g.price || 9999,
   }));
 }
 
-async function fetchReal(apiKey, from, to, date) {
-  const params = new URLSearchParams({
-    engine:'google_flights', departure_id:from, arrival_id:to,
-    outbound_date:date, currency:'BRL', hl:'pt', api_key:apiKey, type:'2'
-  });
-  const directUrl = `https://serpapi.com/search.json?${params}`;
-
-  try {
-    const res = await fetch(directUrl, { mode:'cors' });
-    if (!res.ok) throw new Error('HTTP '+res.status);
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    corsMode = 'direct'; updateModeChip();
-    return parseFlights(data);
-  } catch(e) {
-    console.warn('[direto]', e.message);
-  }
-
-  for (let i = 0; i < PROXIES.length; i++) {
-    const idx = (proxyIdx + i) % PROXIES.length;
-    const proxyUrl = PROXIES[idx](directUrl);
-    try {
-      await new Promise(r => setTimeout(r, 300 + i * 200));
-      const res = await fetch(proxyUrl);
-      if (res.status === 429) { console.warn(`proxy ${idx} 429`); continue; }
-      if (!res.ok) throw new Error('HTTP '+res.status);
-      const data = await res.json();
-      if (data.error) throw new Error('SerpAPI: '+data.error);
-      proxyIdx = idx;
-      corsMode = 'proxy'; updateModeChip();
-      return parseFlights(data);
-    } catch(e) {
-      console.warn(`[proxy ${idx}]`, e.message);
-    }
-  }
-
-  const chip = document.getElementById('modeChip');
-  if (chip) { chip.textContent='● ERRO: todos os proxies falharam'; chip.style.color='#9a2a0a'; chip.style.borderColor='#d46060'; }
-  corsMode = 'failed';
-  throw new Error('proxies esgotados');
-}
-
-function updateModeChip() {
-  const chip = document.getElementById('modeChip');
-  if (!chip) return;
-  if (corsMode==='direct') { chip.textContent='● DADOS REAIS (direto)'; chip.style.color='#1a6b3c'; chip.style.borderColor='#1a6b3c'; }
-  else if (corsMode==='proxy') { chip.textContent='● DADOS REAIS (via proxy)'; chip.style.color='#8a6a00'; chip.style.borderColor='#c8a800'; }
-  else { chip.textContent='● SIMULAÇÃO (API falhou)'; chip.style.color='#9a2a0a'; chip.style.borderColor='#d46060'; }
+async function fetchFlights(from, to, date) {
+  // Chama o endpoint serverless local — sem chave no HTML, sem CORS
+  const res = await fetch(`/api/flights?from=${from}&to=${to}&date=${date}`);
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+  return parseFlights(data);
 }
 
 async function runScan() {
@@ -470,11 +418,9 @@ async function runScan() {
   const loading=document.getElementById('loading');
   const calEl=document.getElementById('cal');
   const nWks=parseInt(document.getElementById('wks').value);
-  const apiKey=document.getElementById('apiKey').value.trim();
 
   btn.disabled=true; loading.classList.add('on'); calEl.innerHTML='';
   document.getElementById('sum').classList.remove('on');
-  corsMode = 'direct';
   Object.keys(STORE).forEach(k=>delete STORE[k]);
 
   const weeks=getWeeks(nWks);
@@ -487,7 +433,7 @@ async function runScan() {
   if (dir!=='bsb-bh') routes.push({key:'CNF-BSB',label:'Belo Horizonte → Brasília',from:'CNF',to:'BSB'});
 
   const total=future.length*routes.length;
-  let done=0;
+  let done=0, usedReal=false, anyFail=false;
   const loadTxt=document.getElementById('loadTxt');
   const progFill=document.getElementById('progFill');
 
@@ -495,21 +441,25 @@ async function runScan() {
     for (const date of future) {
       const ds=iso(date);
       loadTxt.textContent=`${route.key} · ${fmtS(date)}...`;
-      let flights;
-      if (apiKey) {
-        try { flights=await fetchReal(apiKey,route.from,route.to,ds); }
-        catch(e) { flights=simFlights(ds,route.from); }
-      } else {
-        await new Promise(r=>setTimeout(r,6));
-        flights=simFlights(ds,route.from);
+      let flights, isReal=false;
+      try {
+        flights = await fetchFlights(route.from, route.to, ds);
+        isReal = true; usedReal = true;
+      } catch(e) {
+        console.warn('API falhou para', ds, e.message);
+        flights = simFlights(ds, route.from);
+        anyFail = true;
       }
-      STORE[`${route.key}|${ds}`]=selectCard(flights);
+      const card = selectCard(flights);
+      if (card) card.rawFlights = flights;
+      STORE[`${route.key}|${ds}`] = card;
       progFill.style.width=(++done/total*100)+'%';
     }
   }
 
   loading.classList.remove('on');
   btn.disabled=false;
+  setMode(usedReal ? 'real' : 'sim');
 
   let calHtml='';
   let gMin=Infinity,gDate='',gAirline='';
